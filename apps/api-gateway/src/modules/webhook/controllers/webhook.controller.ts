@@ -17,18 +17,18 @@ export class WebhookController {
         const rawBody = rawBuffer ? rawBuffer.toString("utf8") : JSON.stringify(_body ?? {});
 
         const result = await this.webhookService.acceptWebhook({
-        provider,
-        path: req.originalUrl ?? req.url,
-        method: req.method,
-        headers: req.headers,
-        query: req.query as Record<string, unknown>,
-        rawBody,
-        sourceIp: req.ip ?? null,
+            provider,
+            path: req.originalUrl ?? req.url,
+            method: req.method,
+            headers: req.headers,
+            query: req.query as Record<string, unknown>,
+            rawBody,
+            sourceIp: req.ip ?? null,
         });
 
         return {
-        message: "Webhook accepted",
-        ...result,
+            message: "Webhook accepted",
+            ...result,
         };
     }
 }
