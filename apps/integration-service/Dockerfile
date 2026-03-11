@@ -18,13 +18,16 @@ RUN pnpm run build:integration-service
 FROM node:20-alpine AS runner
 
 WORKDIR /app
+
 ENV NODE_ENV=production
+ENV PORT=3002
+ENV NATS_SERVERS=nats://nats:4222
 
 RUN corepack enable
 
 COPY package.json ./
 COPY pnpm-lock.yaml ./
-# COPY pnpm-workspace.yaml ./
+COPY pnpm-workspace.yaml ./
 
 RUN pnpm install --prod --frozen-lockfile
 

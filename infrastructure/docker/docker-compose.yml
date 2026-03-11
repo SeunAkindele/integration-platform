@@ -8,3 +8,16 @@ services:
       - "4222:4222"
       - "8222:8222"
     command: ["-js", "-m", "8222"]
+
+  api-gateway:
+    build:
+      context: ../..
+      dockerfile: apps/api-gateway/Dockerfile
+    container_name: integration-platform-api-gateway
+    ports:
+      - "3000:3000"
+    environment:
+      PORT: 3000
+      NATS_SERVERS: nats://nats:4222
+    depends_on:
+      - nats
