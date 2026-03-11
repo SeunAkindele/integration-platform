@@ -1,5 +1,5 @@
 import { NestFactory } from '@nestjs/core';
-import { WebhookProcessorModule } from './webhook-processor.module';
+import { WebhookProcessorModule } from './app.module';
 
 async function bootstrap() {
   const app = await NestFactory.create(WebhookProcessorModule);

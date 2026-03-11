@@ -1,7 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { INestApplication } from '@nestjs/common';
 import * as request from 'supertest';
-import { WebhookProcessorModule } from './../src/webhook-processor.module';
+import { WebhookProcessorModule } from '../src/app.module';
 
 describe('WebhookProcessorController (e2e)', () => {
   let app: INestApplication;

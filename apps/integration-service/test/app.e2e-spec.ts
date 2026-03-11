@@ -1,7 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { INestApplication } from '@nestjs/common';
 import * as request from 'supertest';
-import { IntegrationServiceModule } from './../src/integration-service.module';
+import { IntegrationServiceModule } from '../src/app.module';
 
 describe('IntegrationServiceController (e2e)', () => {
   let app: INestApplication;
