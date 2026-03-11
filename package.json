@@ -7,6 +7,9 @@
   "license": "UNLICENSED",
   "scripts": {
     "build": "nest build",
+    "build:api-gateway": "nest build api-gateway",
+    "build:integration-service": "nest build integration-service",
+    "build:webhook-processor": "nest build webhook-processor",
     "format": "prettier --write \"apps/**/*.ts\" \"libs/**/*.ts\"",
     "start": "nest start",
     "start:api-gateway": "nest start api-gateway",
