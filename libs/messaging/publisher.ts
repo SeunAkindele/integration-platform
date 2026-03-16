@@ -1,20 +1,12 @@
-import { Inject, Injectable, OnModuleInit } from "@nestjs/common";
-import { ClientProxy } from "@nestjs/microservices";
-import { firstValueFrom } from "rxjs";
-import { NATS_SERVICE } from "./nats.service";
+import { Injectable } from "@nestjs/common";
+import { JetStreamService } from "./jetstream.service";
 
 @Injectable()
-export class EventPublisher implements OnModuleInit {
-  constructor(
-    @Inject(NATS_SERVICE)
-    private readonly client: ClientProxy,
-  ) {}
+export class Publisher {
+  constructor(private readonly jetStreamService: JetStreamService) {}
 
-  async onModuleInit(): Promise<void> {
-    await this.client.connect();
-  }
-
-  async publish<TPayload>(subject: string, payload: TPayload): Promise<void> {
-    await firstValueFrom(this.client.emit(subject, payload));
+  async publish(subject: string, payload: unknown): Promise<void> {
+    const js = this.jetStreamService.getClient();
+    await js.publish(subject, Buffer.from(JSON.stringify(payload)));
   }
 }

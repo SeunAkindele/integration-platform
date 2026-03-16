@@ -1,33 +1,13 @@
 import { Global, Module } from "@nestjs/common";
-import { ClientsModule, Transport } from "@nestjs/microservices";
-import { ConfigModule, ConfigService } from "@nestjs/config";
-import { NATS_SERVICE } from "./nats.service";
+import { ConfigModule } from "@nestjs/config";
+import { JetStreamService } from "./jetstream.service";
+import { Publisher } from "./publisher";
+import { ConsumerFactory } from "./consumer.factory";
 
 @Global()
 @Module({
-  imports: [
-    ConfigModule,
-    ClientsModule.registerAsync([
-      {
-        name: NATS_SERVICE,
-        imports: [ConfigModule],
-        inject: [ConfigService],
-        useFactory: (configService: ConfigService) => {
-          const servers = (configService.get<string>("NATS_SERVERS") ?? "nats://localhost:4222")
-            .split(",")
-            .map((v) => v.trim())
-            .filter(Boolean);
-
-          return {
-            transport: Transport.NATS,
-            options: {
-              servers,
-            },
-          };
-        },
-      },
-    ]),
-  ],
-  exports: [ClientsModule],
+  imports: [ConfigModule],
+  providers: [JetStreamService, Publisher, ConsumerFactory],
+  exports: [JetStreamService, Publisher, ConsumerFactory],
 })
 export class NatsModule {}

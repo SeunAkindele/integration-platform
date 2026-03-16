@@ -1,4 +1,4 @@
-export interface WebhookReceivedEvent {
+export interface AcceptWebhookInput {
     provider: string;
     path: string;
     method: string;
@@ -6,9 +6,4 @@ export interface WebhookReceivedEvent {
     query: Record<string, unknown>;
     rawBody: string;
     sourceIp: string | null;
-    eventId: string;
-    receivedAt: string;
-    parsedBody?: unknown;
-    signature?: string | null;
-  }
-  
+}
