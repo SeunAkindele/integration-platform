@@ -1,4 +1,4 @@
-import { WebhookProvider } from "@libs/common/enums/webhook-provider.enum";
+import { WebhookProvider } from "../../../../libs/common/enums/webhook-provider.enum";
 import { Injectable, Logger } from "@nestjs/common";
 import * as crypto from "crypto";
 

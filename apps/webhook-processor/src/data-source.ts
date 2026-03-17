@@ -13,6 +13,8 @@ export default new DataSource({
   password: process.env.DB_PASSWORD || "postgres",
   database: process.env.DB_NAME || "integration_platform",
   entities: [WebhookEventEntity, ProcessedEventEntity],
-  migrations: ["apps/webhook-processor/src/migrations/*.ts"],
+  migrations: [
+    "dist/apps/webhook-processor/apps/webhook-processor/src/migrations/*.js",
+  ],
   synchronize: false,
 });

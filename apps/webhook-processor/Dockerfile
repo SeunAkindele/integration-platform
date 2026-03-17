@@ -35,4 +35,5 @@ COPY --from=builder /app/dist ./dist
 
 EXPOSE 3001
 
-CMD ["node", "dist/apps/webhook-processor/main.js"]
+# CMD ["node", "dist/apps/webhook-processor/main.js"]
+CMD ["node", "dist/apps/webhook-processor/apps/webhook-processor/src/main.js"]

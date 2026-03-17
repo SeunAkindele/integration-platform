@@ -22,7 +22,7 @@ export class JetStreamService implements OnModuleInit {
 
     const streams: { name: string; subjects: string[] }[] = [
       { name: "WEBHOOKS", subjects: ["webhook.>"] },
-      { name: "WEBHOOKS_DLQ", subjects: ["webhook.dlq.>"] },
+      { name: "WEBHOOKS_DLQ", subjects: ["dlq.webhook.>"] },
     ];
 
     for (const cfg of streams) {
