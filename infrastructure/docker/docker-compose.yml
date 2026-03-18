@@ -43,7 +43,7 @@ services:
     image: postgres:16-alpine
     container_name: integration-platform-postgres
     ports:
-      - "5432:5432"
+      - "5434:5432"
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
