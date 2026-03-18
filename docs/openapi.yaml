@@ -4,14 +4,20 @@ info:
   description: |
     Webhook ingestion API for the Integration Platform.
 
-    ## Flow
+    The API Gateway accepts any JSON body — it does not validate the payload structure.
+    The raw body is forwarded as-is to the Webhook Processor via NATS JetStream for
+    signature verification and persistence.
 
-    1. External providers (GitHub, Stripe, Slack) send webhooks to `POST /webhooks/{provider}`
-    2. The API Gateway validates the request, extracts the signature header, and publishes the event to NATS JetStream
-    3. The Webhook Processor consumes the event, verifies the signature, and persists it into PostgreSQL
-    4. The event status transitions from `received` → `validated` (or `failed`)
+    ## What the API Gateway extracts
 
-    ## Signature Headers
+    | Source | What it uses |
+    |--------|-------------|
+    | Path param | `provider` — determines which signature header to look for |
+    | Headers | Provider-specific signature header (see table below) |
+    | Body | Stored as raw string; JSON-parsed if valid |
+    | Request metadata | IP address, full URL path, HTTP method, query params |
+
+    ## Signature Headers by Provider
 
     | Provider | Header |
     |----------|--------|
@@ -28,340 +34,135 @@ servers:
 
 tags:
   - name: Webhooks
-    description: Webhook ingestion endpoints
+    description: Webhook ingestion endpoint
 
 paths:
-  /webhooks/github:
+  /webhooks/{provider}:
     post:
-      operationId: receiveGitHubWebhook
+      operationId: receiveWebhook
       tags: [Webhooks]
-      summary: Receive a GitHub webhook
+      summary: Receive a webhook from any supported provider
       description: |
-        Accepts a GitHub webhook event, publishes it to the message broker for
-        asynchronous processing (signature verification, persistence).
+        Accepts any JSON payload from a provider, assigns a unique `eventId`,
+        and publishes a `WebhookReceivedEvent` to NATS JetStream for asynchronous
+        processing. Returns immediately with `202 Accepted`.
+
+        The gateway does **not** validate or inspect the body — it is stored as a
+        raw string and optionally JSON-parsed.
       parameters:
-        - $ref: "#/components/parameters/GitHubSignatureHeader"
-        - $ref: "#/components/parameters/GitHubEventHeader"
-        - $ref: "#/components/parameters/GitHubDeliveryHeader"
+        - name: provider
+          in: path
+          required: true
+          description: The webhook provider
+          schema:
+            type: string
+            enum: [github, stripe, slack]
+        - name: x-hub-signature-256
+          in: header
+          required: false
+          description: "GitHub HMAC-SHA256 signature. Format: `sha256=<hex-digest>`"
+          schema:
+            type: string
+            example: "sha256=d57c68ca6f92289e6987922ff26938930f6e66a2d161ef06abdf1859230aa23c"
+        - name: x-github-event
+          in: header
+          required: false
+          description: "GitHub event name (e.g. `push`, `pull_request`). Forwarded in headers."
+          schema:
+            type: string
+            example: push
+        - name: x-github-delivery
+          in: header
+          required: false
+          description: GitHub delivery GUID. Forwarded in headers.
+          schema:
+            type: string
+            format: uuid
+            example: "72d3162e-cc78-11e3-81ab-4c9367dc0958"
+        - name: stripe-signature
+          in: header
+          required: false
+          description: "Stripe signature. Format: `t=<timestamp>,v1=<signature>`"
+          schema:
+            type: string
+            example: "t=1742292900,v1=5257a869e7ecebeda32affa62cdca3fa51cad7e77a0e56ff536d0ce8e108d8bd"
+        - name: x-slack-signature
+          in: header
+          required: false
+          description: "Slack request signature. Format: `v0=<hex-digest>`"
+          schema:
+            type: string
+            example: "v0=a2114d57b48eac39b9ad189dd8316235a7b4a8d21a10bd27519666489c69b503"
+        - name: x-slack-request-timestamp
+          in: header
+          required: false
+          description: Unix timestamp from Slack
+          schema:
+            type: string
+            example: "1742292900"
       requestBody:
         required: true
+        description: |
+          Any valid JSON payload. The API Gateway does not validate the body structure —
+          it is stored as a raw string and forwarded to the Webhook Processor.
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/GitHubPushEvent"
+              type: object
+              additionalProperties: true
+              description: Any valid JSON object. The gateway does not enforce a schema.
             examples:
-              push:
-                summary: Push event
+              minimal:
+                summary: Minimal payload
+                value:
+                  event: test
+              github_push:
+                summary: GitHub push event
                 value:
                   ref: refs/heads/main
-                  before: "6113728f27ae82c7b1a177c8d03f9e96e0adf246"
                   after: "0d1a26e67d8f5eaf1f6ba5c57fc3c7d91ac0fd1c"
                   repository:
-                    id: 123456789
                     name: integration-platform
                     full_name: oriade/integration-platform
-                    private: false
-                    html_url: https://github.com/oriade/integration-platform
-                    owner:
-                      login: oriade
-                      id: 987654
                   pusher:
                     name: oriade
                     email: dev@oriade.io
-                  commits:
-                    - id: "0d1a26e67d8f5eaf1f6ba5c57fc3c7d91ac0fd1c"
-                      message: "feat: add webhook processing pipeline"
-                      timestamp: "2026-03-18T10:15:00Z"
-                      author:
-                        name: oriade
-                        email: dev@oriade.io
-                      added: ["src/processor.ts"]
-                      removed: []
-                      modified: ["package.json"]
-              pull_request_opened:
-                summary: Pull request opened
-                value:
-                  action: opened
-                  number: 42
-                  pull_request:
-                    id: 11223344
-                    number: 42
-                    state: open
-                    title: "feat: add stripe adapter"
-                    body: "Implements Stripe webhook adapter for payment events"
-                    html_url: https://github.com/oriade/integration-platform/pull/42
-                    user:
-                      login: oriade
-                      id: 987654
-                    head:
-                      ref: feat/stripe-adapter
-                      sha: "abc123def456"
-                    base:
-                      ref: main
-                      sha: "789ghi012jkl"
-                    created_at: "2026-03-18T09:00:00Z"
-                  repository:
-                    id: 123456789
-                    name: integration-platform
-                    full_name: oriade/integration-platform
-              issue_comment:
-                summary: Issue comment created
-                value:
-                  action: created
-                  issue:
-                    id: 55667788
-                    number: 10
-                    title: "Bug: webhook signature mismatch"
-                    state: open
-                    html_url: https://github.com/oriade/integration-platform/issues/10
-                  comment:
-                    id: 99001122
-                    body: "I can reproduce this with an invalid HMAC key"
-                    user:
-                      login: contributor
-                      id: 112233
-                    created_at: "2026-03-18T11:30:00Z"
-                  repository:
-                    id: 123456789
-                    name: integration-platform
-                    full_name: oriade/integration-platform
-      responses:
-        "202":
-          $ref: "#/components/responses/WebhookAccepted"
-
-  /webhooks/stripe:
-    post:
-      operationId: receiveStripeWebhook
-      tags: [Webhooks]
-      summary: Receive a Stripe webhook
-      description: |
-        Accepts a Stripe webhook event, publishes it to the message broker for
-        asynchronous processing (signature verification, persistence).
-      parameters:
-        - $ref: "#/components/parameters/StripeSignatureHeader"
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/StripeEvent"
-            examples:
-              payment_intent_succeeded:
-                summary: Payment intent succeeded
+              stripe_payment:
+                summary: Stripe payment intent
                 value:
                   id: evt_1PQ2R3S4T5U6V7W8X9
-                  object: event
-                  api_version: "2024-12-18"
-                  created: 1742292900
                   type: payment_intent.succeeded
                   data:
                     object:
                       id: pi_3PQ2R3S4T5U6V7W8
-                      object: payment_intent
                       amount: 5000
                       currency: usd
                       status: succeeded
-                      customer: cus_ABC123DEF456
-                      payment_method: pm_1PQ2R3S4T5U6V7W8
-                      description: "Order #1234"
-                      metadata:
-                        order_id: "1234"
-                      created: 1742292800
-                  livemode: false
-                  pending_webhooks: 1
-                  request:
-                    id: req_ABC123
-                    idempotency_key: null
-              checkout_session_completed:
-                summary: Checkout session completed
-                value:
-                  id: evt_2AB3CD4EF5GH6IJ7K8
-                  object: event
-                  api_version: "2024-12-18"
-                  created: 1742293000
-                  type: checkout.session.completed
-                  data:
-                    object:
-                      id: cs_test_a1b2c3d4e5f6
-                      object: checkout.session
-                      amount_total: 9900
-                      currency: usd
-                      customer: cus_XYZ789
-                      customer_email: customer@example.com
-                      mode: payment
-                      payment_status: paid
-                      status: complete
-                      success_url: https://example.com/success
-                      cancel_url: https://example.com/cancel
-                      metadata:
-                        plan: pro
-                  livemode: false
-                  pending_webhooks: 1
-              invoice_payment_failed:
-                summary: Invoice payment failed
-                value:
-                  id: evt_3MN4OP5QR6ST7UV8W9
-                  object: event
-                  api_version: "2024-12-18"
-                  created: 1742293100
-                  type: invoice.payment_failed
-                  data:
-                    object:
-                      id: in_1ABC2DEF3GHI
-                      object: invoice
-                      amount_due: 2500
-                      amount_paid: 0
-                      currency: usd
-                      customer: cus_FAIL123
-                      customer_email: failing@example.com
-                      status: open
-                      attempt_count: 3
-                      next_payment_attempt: 1742379500
-                      subscription: sub_SUB123
-                  livemode: false
-                  pending_webhooks: 1
-      responses:
-        "202":
-          $ref: "#/components/responses/WebhookAccepted"
-
-  /webhooks/slack:
-    post:
-      operationId: receiveSlackWebhook
-      tags: [Webhooks]
-      summary: Receive a Slack webhook
-      description: |
-        Accepts a Slack webhook event, publishes it to the message broker for
-        asynchronous processing (signature verification, persistence).
-
-        **Note:** Slack sends a `url_verification` challenge on first setup.
-        This endpoint accepts it but processes it the same as other events.
-      parameters:
-        - $ref: "#/components/parameters/SlackSignatureHeader"
-        - $ref: "#/components/parameters/SlackTimestampHeader"
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/SlackEvent"
-            examples:
-              url_verification:
-                summary: URL verification challenge
-                value:
-                  type: url_verification
-                  token: "Jhj5dZrVaK7ZwHHjRyZWjbDl"
-                  challenge: "3eZbrw1aBm2rZgRNFdxV2595E9CY3gmdALWMmHkvFXO7tYXAYM8P"
-              message:
-                summary: Message posted in channel
+              slack_message:
+                summary: Slack message event
                 value:
                   type: event_callback
-                  token: "Jhj5dZrVaK7ZwHHjRyZWjbDl"
                   team_id: T0ABCDEF1
-                  api_app_id: A0ABCDEF1
                   event:
                     type: message
-                    subtype: null
                     channel: C0ABCDEF1
                     user: U0ABCDEF1
-                    text: "Deploy webhook-processor to staging"
-                    ts: "1742292900.000100"
-                    event_ts: "1742292900.000100"
-                    channel_type: channel
+                    text: "hello world"
                   event_id: Ev0ABCDEF1
                   event_time: 1742292900
-              app_mention:
-                summary: App mentioned in channel
-                value:
-                  type: event_callback
-                  token: "Jhj5dZrVaK7ZwHHjRyZWjbDl"
-                  team_id: T0ABCDEF1
-                  api_app_id: A0ABCDEF1
-                  event:
-                    type: app_mention
-                    channel: C0ABCDEF1
-                    user: U0ABCDEF1
-                    text: "<@U0BOTID> status of webhook pipeline"
-                    ts: "1742293000.000200"
-                    event_ts: "1742293000.000200"
-                  event_id: Ev0GHIJKL2
-                  event_time: 1742293000
-              channel_created:
-                summary: Channel created
-                value:
-                  type: event_callback
-                  token: "Jhj5dZrVaK7ZwHHjRyZWjbDl"
-                  team_id: T0ABCDEF1
-                  api_app_id: A0ABCDEF1
-                  event:
-                    type: channel_created
-                    channel:
-                      id: C0NEWCHAN1
-                      name: integration-alerts
-                      created: 1742293100
-                      creator: U0ABCDEF1
-                  event_id: Ev0MNOPQR3
-                  event_time: 1742293100
       responses:
         "202":
-          $ref: "#/components/responses/WebhookAccepted"
+          description: Webhook accepted for asynchronous processing
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WebhookAcceptedResponse"
+              example:
+                message: Webhook accepted
+                accepted: true
+                eventId: "550e8400-e29b-41d4-a716-446655440000"
 
 components:
-  parameters:
-    GitHubSignatureHeader:
-      name: x-hub-signature-256
-      in: header
-      required: false
-      description: "HMAC-SHA256 signature of the request body using the webhook secret. Format: `sha256=<hex-digest>`"
-      schema:
-        type: string
-        example: "sha256=d57c68ca6f92289e6987922ff26938930f6e66a2d161ef06abdf1859230aa23c"
-
-    GitHubEventHeader:
-      name: x-github-event
-      in: header
-      required: false
-      description: "Name of the GitHub event that triggered the webhook (e.g. `push`, `pull_request`)"
-      schema:
-        type: string
-        example: push
-
-    GitHubDeliveryHeader:
-      name: x-github-delivery
-      in: header
-      required: false
-      description: "Unique GUID for the webhook delivery"
-      schema:
-        type: string
-        format: uuid
-        example: "72d3162e-cc78-11e3-81ab-4c9367dc0958"
-
-    StripeSignatureHeader:
-      name: stripe-signature
-      in: header
-      required: false
-      description: "Stripe webhook signature for verifying the event. Format: `t=<timestamp>,v1=<signature>`"
-      schema:
-        type: string
-        example: "t=1742292900,v1=5257a869e7ecebeda32affa62cdca3fa51cad7e77a0e56ff536d0ce8e108d8bd"
-
-    SlackSignatureHeader:
-      name: x-slack-signature
-      in: header
-      required: false
-      description: "Slack request signature. Format: `v0=<hex-digest>`"
-      schema:
-        type: string
-        example: "v0=a2114d57b48eac39b9ad189dd8316235a7b4a8d21a10bd27519666489c69b503"
-
-    SlackTimestampHeader:
-      name: x-slack-request-timestamp
-      in: header
-      required: false
-      description: "Unix timestamp of when the request was sent from Slack"
-      schema:
-        type: string
-        example: "1742292900"
-
   schemas:
     WebhookAcceptedResponse:
       type: object
@@ -376,262 +177,5 @@ components:
         eventId:
           type: string
           format: uuid
-          description: Unique event ID assigned by the API gateway. Use this to track the webhook through the processing pipeline.
+          description: Unique event ID assigned by the API Gateway. Use this to track the webhook through the processing pipeline.
           example: "550e8400-e29b-41d4-a716-446655440000"
-
-    GitHubPushEvent:
-      type: object
-      description: GitHub push event payload
-      properties:
-        ref:
-          type: string
-          example: refs/heads/main
-        before:
-          type: string
-          example: "6113728f27ae82c7b1a177c8d03f9e96e0adf246"
-        after:
-          type: string
-          example: "0d1a26e67d8f5eaf1f6ba5c57fc3c7d91ac0fd1c"
-        repository:
-          type: object
-          properties:
-            id:
-              type: integer
-            name:
-              type: string
-            full_name:
-              type: string
-            private:
-              type: boolean
-            html_url:
-              type: string
-              format: uri
-            owner:
-              type: object
-              properties:
-                login:
-                  type: string
-                id:
-                  type: integer
-        pusher:
-          type: object
-          properties:
-            name:
-              type: string
-            email:
-              type: string
-              format: email
-        commits:
-          type: array
-          items:
-            type: object
-            properties:
-              id:
-                type: string
-              message:
-                type: string
-              timestamp:
-                type: string
-                format: date-time
-              author:
-                type: object
-                properties:
-                  name:
-                    type: string
-                  email:
-                    type: string
-                    format: email
-              added:
-                type: array
-                items:
-                  type: string
-              removed:
-                type: array
-                items:
-                  type: string
-              modified:
-                type: array
-                items:
-                  type: string
-
-    StripeEvent:
-      type: object
-      description: Stripe event object
-      required: [id, object, type, data]
-      properties:
-        id:
-          type: string
-          description: Unique event identifier
-          example: evt_1PQ2R3S4T5U6V7W8X9
-        object:
-          type: string
-          enum: [event]
-        api_version:
-          type: string
-          example: "2024-12-18"
-        created:
-          type: integer
-          description: Unix timestamp
-          example: 1742292900
-        type:
-          type: string
-          description: "Event type (e.g. `payment_intent.succeeded`, `checkout.session.completed`)"
-          example: payment_intent.succeeded
-        data:
-          type: object
-          required: [object]
-          properties:
-            object:
-              type: object
-              description: The Stripe API object relevant to the event
-              additionalProperties: true
-        livemode:
-          type: boolean
-          example: false
-        pending_webhooks:
-          type: integer
-          example: 1
-        request:
-          type: object
-          nullable: true
-          properties:
-            id:
-              type: string
-              nullable: true
-            idempotency_key:
-              type: string
-              nullable: true
-
-    SlackEvent:
-      type: object
-      description: Slack Events API payload
-      required: [type]
-      properties:
-        type:
-          type: string
-          enum: [url_verification, event_callback]
-          description: "`url_verification` for initial challenge, `event_callback` for real events"
-        token:
-          type: string
-          description: Deprecated verification token
-        challenge:
-          type: string
-          description: Challenge string (only for url_verification)
-        team_id:
-          type: string
-          example: T0ABCDEF1
-        api_app_id:
-          type: string
-          example: A0ABCDEF1
-        event:
-          type: object
-          description: The actual Slack event
-          properties:
-            type:
-              type: string
-              description: "Event type (e.g. `message`, `app_mention`, `channel_created`)"
-            channel:
-              type: string
-            user:
-              type: string
-            text:
-              type: string
-            ts:
-              type: string
-            event_ts:
-              type: string
-            channel_type:
-              type: string
-        event_id:
-          type: string
-          example: Ev0ABCDEF1
-        event_time:
-          type: integer
-          example: 1742292900
-
-    # --- Database entities (for reference / documentation) ---
-
-    WebhookEventRecord:
-      type: object
-      description: "Row in the `webhook_events` PostgreSQL table. Represents a persisted webhook."
-      properties:
-        id:
-          type: string
-          format: uuid
-        eventId:
-          type: string
-          description: Matches the eventId returned by the API gateway
-        provider:
-          type: string
-          enum: [github, stripe, slack]
-        receivedAt:
-          type: string
-          format: date-time
-        sourceIp:
-          type: string
-          nullable: true
-        signature:
-          type: string
-          nullable: true
-        headers:
-          type: object
-          additionalProperties: true
-        rawBody:
-          type: string
-        parsedBody:
-          type: object
-          nullable: true
-          additionalProperties: true
-        status:
-          type: string
-          enum: [received, validated, failed]
-          description: |
-            - `received` — webhook saved, pending signature verification
-            - `validated` — signature check passed
-            - `failed` — signature check failed
-        failureReason:
-          type: string
-          nullable: true
-        createdAt:
-          type: string
-          format: date-time
-        updatedAt:
-          type: string
-          format: date-time
-
-    ProcessedEventRecord:
-      type: object
-      description: "Row in the `processed_events` PostgreSQL table. Idempotency record."
-      properties:
-        id:
-          type: string
-          format: uuid
-        eventId:
-          type: string
-        provider:
-          type: string
-          enum: [github, stripe, slack]
-        status:
-          type: string
-          enum: [processed, failed]
-        notes:
-          type: string
-          nullable: true
-        processedAt:
-          type: string
-          format: date-time
-        createdAt:
-          type: string
-          format: date-time
-
-  responses:
-    WebhookAccepted:
-      description: Webhook accepted for asynchronous processing
-      content:
-        application/json:
-          schema:
-            $ref: "#/components/schemas/WebhookAcceptedResponse"
-          example:
-            message: Webhook accepted
-            accepted: true
-            eventId: "550e8400-e29b-41d4-a716-446655440000"

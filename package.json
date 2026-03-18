@@ -10,14 +10,28 @@
     "build:api-gateway": "nest build api-gateway",
     "build:integration-service": "nest build integration-service",
     "build:webhook-processor": "nest build webhook-processor && tsc -p apps/webhook-processor/tsconfig.app.json",
-    "format": "prettier --write \"apps/**/*.ts\" \"libs/**/*.ts\"",
+
     "start": "nest start",
+    "start:dev": "nest start --watch",
+    "start:debug": "nest start --debug --watch",
+
     "start:api-gateway": "nest start api-gateway",
     "start:api-gateway:dev": "nest start api-gateway --watch",
-    "start:dev": "nest start --watch",
-    "migration:run:webhook": "typeorm migration:run -d dist/apps/webhook-processor/apps/webhook-processor/src/data-source.js",
-    "start:debug": "nest start --debug --watch",
+    "start:webhook-processor": "nest start webhook-processor",
+    "start:webhook-processor:dev": "nest start webhook-processor --watch",
+
     "start:prod": "node dist/apps/integration-platform/main",
+    "start:api-gateway:prod": "node dist/apps/api-gateway/main",
+    "start:webhook-processor:prod": "node dist/apps/webhook-processor/main",
+
+    "migration:run:webhook": "pnpm build:webhook-processor && typeorm migration:run -d dist/apps/webhook-processor/apps/webhook-processor/src/data-source.js",
+
+    "infra:start": "nats-server -js -m 8222 & brew services start postgresql@16",
+    "infra:stop": "pkill nats-server; brew services stop postgresql@16",
+    "infra:docker": "docker compose -f infrastructure/docker/docker-compose.yml up -d nats postgres",
+    "infra:docker:stop": "docker compose -f infrastructure/docker/docker-compose.yml down",
+
+    "format": "prettier --write \"apps/**/*.ts\" \"libs/**/*.ts\"",
     "lint": "eslint \"{src,apps,libs,test}/**/*.ts\" --fix",
     "test": "jest",
     "test:watch": "jest --watch",
