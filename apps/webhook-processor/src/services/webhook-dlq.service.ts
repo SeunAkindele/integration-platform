@@ -3,6 +3,7 @@ import { JSONCodec } from "nats";
 import { JetStreamService } from "../../../../libs/messaging/jetstream.service";
 import { SUBJECTS } from "../../../../libs/contracts/subjects";
 import { WebhookDlqEvent } from "../../../../libs/contracts/events/webhook-dlq.event";
+import { WebhookDlqStoreService } from "./webhook-dlq-store.service";
 
 @Injectable()
 export class WebhookDlqService {
@@ -12,7 +13,10 @@ export class WebhookDlqService {
   private static readonly SOURCE_STREAM = "WEBHOOKS";
   private static readonly FAILED_CONSUMER = "webhook-processor-received-v1";
 
-  constructor(private readonly jetStreamService: JetStreamService) {}
+  constructor(
+    private readonly jetStreamService: JetStreamService,
+    private readonly dlqStoreService: WebhookDlqStoreService,
+  ) {}
 
   async moveToDlq(streamSeq: number): Promise<void> {
     const js = this.jetStreamService.getClient();
@@ -45,6 +49,8 @@ export class WebhookDlqService {
       SUBJECTS.WEBHOOK_DLQ_V1,
       this.json.encode(dlqEvent),
     );
+
+    await this.dlqStoreService.save(dlqEvent);
 
     this.logger.warn(
       `Moved message seq=${streamSeq} subject="${stored.subject}" to DLQ subject "${SUBJECTS.WEBHOOK_DLQ_V1}"`,

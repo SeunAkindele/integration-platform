@@ -1,8 +1,8 @@
-import { NestFactory } from '@nestjs/core';
-import { IntegrationServiceModule } from './app.module';
+import { NestFactory } from "@nestjs/core";
+import { AppModule } from "./app.module";
 
 async function bootstrap() {
-  const app = await NestFactory.create(IntegrationServiceModule);
-  await app.listen(process.env.port ?? 3000);
+  const app = await NestFactory.createApplicationContext(AppModule);
+  app.enableShutdownHooks();
 }
 bootstrap();

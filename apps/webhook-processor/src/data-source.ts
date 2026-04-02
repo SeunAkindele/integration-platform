@@ -4,6 +4,7 @@ dotenv.config();
 import { DataSource } from "typeorm";
 import { WebhookEventEntity } from "./entities/webhook-event.entity";
 import { ProcessedEventEntity } from "./entities/processed-event.entity";
+import { DeadLetterEventEntity } from "./entities/dead-letter-event.entity";
 
 export default new DataSource({
   type: "postgres",
@@ -12,9 +13,9 @@ export default new DataSource({
   username: process.env.DB_USER || "postgres",
   password: process.env.DB_PASSWORD || "postgres",
   database: process.env.DB_NAME || "integration_platform",
-  entities: [WebhookEventEntity, ProcessedEventEntity],
+  entities: [WebhookEventEntity, ProcessedEventEntity, DeadLetterEventEntity],
   migrations: [
-    "dist/apps/webhook-processor/apps/webhook-processor/src/migrations/*.js",
+    "apps/webhook-processor/src/migrations/*.ts",
   ],
   synchronize: false,
 });

@@ -35,6 +35,8 @@ servers:
 tags:
   - name: Webhooks
     description: Webhook ingestion endpoint
+  - name: DLQ
+    description: Dead Letter Queue inspection and replay
 
 paths:
   /webhooks/{provider}:
@@ -162,7 +164,130 @@ paths:
                 accepted: true
                 eventId: "550e8400-e29b-41d4-a716-446655440000"
 
+  /dlq:
+    get:
+      operationId: listDlqEntries
+      tags: [DLQ]
+      summary: List dead-lettered events
+      description: |
+        Returns all DLQ entries, optionally filtered by status.
+        Use `?status=pending` to see entries awaiting replay, or
+        `?status=replayed` to see entries that have been replayed.
+      parameters:
+        - name: status
+          in: query
+          required: false
+          description: Filter by DLQ entry status
+          schema:
+            type: string
+            enum: [pending, replayed]
+      responses:
+        "200":
+          description: List of DLQ entries
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/DeadLetterEvent"
+
+  /dlq/{id}:
+    get:
+      operationId: getDlqEntry
+      tags: [DLQ]
+      summary: Get a single DLQ entry
+      parameters:
+        - $ref: "#/components/parameters/DlqId"
+      responses:
+        "200":
+          description: The DLQ entry
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DeadLetterEvent"
+        "404":
+          description: DLQ entry not found
+
+  /dlq/{id}/payload:
+    patch:
+      operationId: updateDlqPayload
+      tags: [DLQ]
+      summary: Update the payload of a DLQ entry before replaying
+      description: |
+        Use this to fix a broken payload before replaying. The request body
+        replaces the stored payload entirely. Only works on entries with
+        status `pending`.
+      parameters:
+        - $ref: "#/components/parameters/DlqId"
+      requestBody:
+        required: true
+        description: The corrected payload to store
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+            examples:
+              fixed_github_push:
+                summary: Corrected GitHub push payload
+                value:
+                  eventId: "550e8400-e29b-41d4-a716-446655440000"
+                  provider: github
+                  receivedAt: "2026-04-02T10:00:00.000Z"
+                  rawBody: '{"ref":"refs/heads/main"}'
+                  signature: null
+                  parsedBody:
+                    ref: refs/heads/main
+                    repository:
+                      full_name: oriade/integration-platform
+      responses:
+        "200":
+          description: Updated DLQ entry with new payload
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DeadLetterEvent"
+        "404":
+          description: DLQ entry not found
+
+  /dlq/{id}/replay:
+    post:
+      operationId: replayDlqEntry
+      tags: [DLQ]
+      summary: Replay a dead-lettered event
+      description: |
+        Re-publishes the stored payload to the original NATS subject
+        (e.g. `webhook.received.v1` or `webhook.validated.v1`).
+
+        Before replaying, the idempotency record for the event is cleared
+        so the consumer will not skip it as a duplicate.
+
+        The entry status is set to `replayed` with a timestamp.
+      parameters:
+        - $ref: "#/components/parameters/DlqId"
+      responses:
+        "200":
+          description: Event replayed successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReplayResponse"
+              example:
+                replayedTo: webhook.received.v1
+        "404":
+          description: DLQ entry not found or already replayed
+
 components:
+  parameters:
+    DlqId:
+      name: id
+      in: path
+      required: true
+      description: UUID of the DLQ entry
+      schema:
+        type: string
+        format: uuid
+        example: "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
   schemas:
     WebhookAcceptedResponse:
       type: object
@@ -179,3 +304,81 @@ components:
           format: uuid
           description: Unique event ID assigned by the API Gateway. Use this to track the webhook through the processing pipeline.
           example: "550e8400-e29b-41d4-a716-446655440000"
+
+    DeadLetterEvent:
+      type: object
+      required:
+        - id
+        - originalSubject
+        - originalStream
+        - originalSequence
+        - failedConsumer
+        - deadLetterReason
+        - status
+        - deadLetteredAt
+        - createdAt
+        - updatedAt
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+        eventId:
+          type: string
+          nullable: true
+          description: Event ID extracted from payload, if available
+          example: "550e8400-e29b-41d4-a716-446655440000"
+        originalSubject:
+          type: string
+          description: The NATS subject the message was originally published to
+          example: webhook.received.v1
+        originalStream:
+          type: string
+          description: The NATS stream the message belonged to
+          example: WEBHOOKS
+        originalSequence:
+          type: integer
+          description: Stream sequence number of the original message
+          example: 42
+        failedConsumer:
+          type: string
+          description: The durable consumer that exhausted all delivery attempts
+          example: webhook-processor-received-v1
+        deadLetterReason:
+          type: string
+          example: max_deliver_exceeded
+        payload:
+          type: object
+          nullable: true
+          additionalProperties: true
+          description: The original (or corrected) event payload
+        status:
+          type: string
+          enum: [pending, replayed]
+          example: pending
+        deadLetteredAt:
+          type: string
+          format: date-time
+          example: "2026-04-02T12:05:00.000Z"
+        replayedAt:
+          type: string
+          format: date-time
+          nullable: true
+          example: null
+        createdAt:
+          type: string
+          format: date-time
+          example: "2026-04-02T12:05:00.000Z"
+        updatedAt:
+          type: string
+          format: date-time
+          example: "2026-04-02T12:05:00.000Z"
+
+    ReplayResponse:
+      type: object
+      required: [replayedTo]
+      properties:
+        replayedTo:
+          type: string
+          description: The NATS subject the event was republished to
+          example: webhook.received.v1

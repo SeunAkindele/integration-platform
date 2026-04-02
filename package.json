@@ -9,7 +9,7 @@
     "build": "nest build",
     "build:api-gateway": "nest build api-gateway",
     "build:integration-service": "nest build integration-service",
-    "build:webhook-processor": "nest build webhook-processor && tsc -p apps/webhook-processor/tsconfig.app.json",
+    "build:webhook-processor": "nest build webhook-processor",
 
     "start": "nest start",
     "start:dev": "nest start --watch",
@@ -19,12 +19,20 @@
     "start:api-gateway:dev": "nest start api-gateway --watch",
     "start:webhook-processor": "nest start webhook-processor",
     "start:webhook-processor:dev": "nest start webhook-processor --watch",
+    "start:integration-service": "nest start integration-service",
+    "start:integration-service:dev": "nest start integration-service --watch",
 
     "start:prod": "node dist/apps/integration-platform/main",
     "start:api-gateway:prod": "node dist/apps/api-gateway/main",
     "start:webhook-processor:prod": "node dist/apps/webhook-processor/main",
 
-    "migration:run:webhook": "pnpm build:webhook-processor && typeorm migration:run -d dist/apps/webhook-processor/apps/webhook-processor/src/data-source.js",
+    "migration:run:webhook": "typeorm-ts-node-commonjs migration:run -d apps/webhook-processor/src/data-source.ts",
+    "migration:revert:webhook": "typeorm-ts-node-commonjs migration:revert -d apps/webhook-processor/src/data-source.ts",
+    "migration:generate:webhook": "typeorm-ts-node-commonjs migration:generate -d apps/webhook-processor/src/data-source.ts",
+
+    "migration:run:integration": "typeorm-ts-node-commonjs migration:run -d apps/integration-service/src/data-source.ts",
+    "migration:revert:integration": "typeorm-ts-node-commonjs migration:revert -d apps/integration-service/src/data-source.ts",
+    "migration:generate:integration": "typeorm-ts-node-commonjs migration:generate -d apps/integration-service/src/data-source.ts",
 
     "infra:start": "nats-server -js -m 8222 & brew services start postgresql@16",
     "infra:stop": "pkill nats-server; brew services stop postgresql@16",
