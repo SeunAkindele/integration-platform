@@ -1,8 +1,24 @@
-import { NestFactory } from '@nestjs/core';
-import { ApiGatewayModule } from './api-gateway.module';
+import { NestFactory } from "@nestjs/core";
+import { ValidationPipe } from "@nestjs/common";
+import { AppModule } from "./app.module";
 
 async function bootstrap() {
-  const app = await NestFactory.create(ApiGatewayModule);
-  await app.listen(process.env.port ?? 3000);
+  const app = await NestFactory.create(AppModule, {
+    rawBody: true,
+  });
+
+  app.useGlobalPipes(
+    new ValidationPipe({
+      whitelist: true,
+      transform: true,
+      forbidNonWhitelisted: false,
+    }),
+  );
+
+  const port = Number(process.env.PORT ?? 3000);
+  await app.listen(port);
+
+  console.log(`api-gateway running on port ${port}`);
 }
+
 bootstrap();

@@ -1,0 +1,384 @@
+openapi: 3.0.3
+info:
+  title: Integration Platform API
+  description: |
+    Webhook ingestion API for the Integration Platform.
+
+    The API Gateway accepts any JSON body — it does not validate the payload structure.
+    The raw body is forwarded as-is to the Webhook Processor via NATS JetStream for
+    signature verification and persistence.
+
+    ## What the API Gateway extracts
+
+    | Source | What it uses |
+    |--------|-------------|
+    | Path param | `provider` — determines which signature header to look for |
+    | Headers | Provider-specific signature header (see table below) |
+    | Body | Stored as raw string; JSON-parsed if valid |
+    | Request metadata | IP address, full URL path, HTTP method, query params |
+
+    ## Signature Headers by Provider
+
+    | Provider | Header |
+    |----------|--------|
+    | GitHub   | `x-hub-signature-256` |
+    | Stripe   | `stripe-signature` |
+    | Slack    | `x-slack-signature` |
+  version: 1.0.0
+  contact:
+    name: Oriade
+
+servers:
+  - url: http://localhost:3000
+    description: Local development
+
+tags:
+  - name: Webhooks
+    description: Webhook ingestion endpoint
+  - name: DLQ
+    description: Dead Letter Queue inspection and replay
+
+paths:
+  /webhooks/{provider}:
+    post:
+      operationId: receiveWebhook
+      tags: [Webhooks]
+      summary: Receive a webhook from any supported provider
+      description: |
+        Accepts any JSON payload from a provider, assigns a unique `eventId`,
+        and publishes a `WebhookReceivedEvent` to NATS JetStream for asynchronous
+        processing. Returns immediately with `202 Accepted`.
+
+        The gateway does **not** validate or inspect the body — it is stored as a
+        raw string and optionally JSON-parsed.
+      parameters:
+        - name: provider
+          in: path
+          required: true
+          description: The webhook provider
+          schema:
+            type: string
+            enum: [github, stripe, slack]
+        - name: x-hub-signature-256
+          in: header
+          required: false
+          description: "GitHub HMAC-SHA256 signature. Format: `sha256=<hex-digest>`"
+          schema:
+            type: string
+            example: "sha256=d57c68ca6f92289e6987922ff26938930f6e66a2d161ef06abdf1859230aa23c"
+        - name: x-github-event
+          in: header
+          required: false
+          description: "GitHub event name (e.g. `push`, `pull_request`). Forwarded in headers."
+          schema:
+            type: string
+            example: push
+        - name: x-github-delivery
+          in: header
+          required: false
+          description: GitHub delivery GUID. Forwarded in headers.
+          schema:
+            type: string
+            format: uuid
+            example: "72d3162e-cc78-11e3-81ab-4c9367dc0958"
+        - name: stripe-signature
+          in: header
+          required: false
+          description: "Stripe signature. Format: `t=<timestamp>,v1=<signature>`"
+          schema:
+            type: string
+            example: "t=1742292900,v1=5257a869e7ecebeda32affa62cdca3fa51cad7e77a0e56ff536d0ce8e108d8bd"
+        - name: x-slack-signature
+          in: header
+          required: false
+          description: "Slack request signature. Format: `v0=<hex-digest>`"
+          schema:
+            type: string
+            example: "v0=a2114d57b48eac39b9ad189dd8316235a7b4a8d21a10bd27519666489c69b503"
+        - name: x-slack-request-timestamp
+          in: header
+          required: false
+          description: Unix timestamp from Slack
+          schema:
+            type: string
+            example: "1742292900"
+      requestBody:
+        required: true
+        description: |
+          Any valid JSON payload. The API Gateway does not validate the body structure —
+          it is stored as a raw string and forwarded to the Webhook Processor.
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+              description: Any valid JSON object. The gateway does not enforce a schema.
+            examples:
+              minimal:
+                summary: Minimal payload
+                value:
+                  event: test
+              github_push:
+                summary: GitHub push event
+                value:
+                  ref: refs/heads/main
+                  after: "0d1a26e67d8f5eaf1f6ba5c57fc3c7d91ac0fd1c"
+                  repository:
+                    name: integration-platform
+                    full_name: oriade/integration-platform
+                  pusher:
+                    name: oriade
+                    email: dev@oriade.io
+              stripe_payment:
+                summary: Stripe payment intent
+                value:
+                  id: evt_1PQ2R3S4T5U6V7W8X9
+                  type: payment_intent.succeeded
+                  data:
+                    object:
+                      id: pi_3PQ2R3S4T5U6V7W8
+                      amount: 5000
+                      currency: usd
+                      status: succeeded
+              slack_message:
+                summary: Slack message event
+                value:
+                  type: event_callback
+                  team_id: T0ABCDEF1
+                  event:
+                    type: message
+                    channel: C0ABCDEF1
+                    user: U0ABCDEF1
+                    text: "hello world"
+                  event_id: Ev0ABCDEF1
+                  event_time: 1742292900
+      responses:
+        "202":
+          description: Webhook accepted for asynchronous processing
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WebhookAcceptedResponse"
+              example:
+                message: Webhook accepted
+                accepted: true
+                eventId: "550e8400-e29b-41d4-a716-446655440000"
+
+  /dlq:
+    get:
+      operationId: listDlqEntries
+      tags: [DLQ]
+      summary: List dead-lettered events
+      description: |
+        Returns all DLQ entries, optionally filtered by status.
+        Use `?status=pending` to see entries awaiting replay, or
+        `?status=replayed` to see entries that have been replayed.
+      parameters:
+        - name: status
+          in: query
+          required: false
+          description: Filter by DLQ entry status
+          schema:
+            type: string
+            enum: [pending, replayed]
+      responses:
+        "200":
+          description: List of DLQ entries
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/DeadLetterEvent"
+
+  /dlq/{id}:
+    get:
+      operationId: getDlqEntry
+      tags: [DLQ]
+      summary: Get a single DLQ entry
+      parameters:
+        - $ref: "#/components/parameters/DlqId"
+      responses:
+        "200":
+          description: The DLQ entry
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DeadLetterEvent"
+        "404":
+          description: DLQ entry not found
+
+  /dlq/{id}/payload:
+    patch:
+      operationId: updateDlqPayload
+      tags: [DLQ]
+      summary: Update the payload of a DLQ entry before replaying
+      description: |
+        Use this to fix a broken payload before replaying. The request body
+        replaces the stored payload entirely. Only works on entries with
+        status `pending`.
+      parameters:
+        - $ref: "#/components/parameters/DlqId"
+      requestBody:
+        required: true
+        description: The corrected payload to store
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+            examples:
+              fixed_github_push:
+                summary: Corrected GitHub push payload
+                value:
+                  eventId: "550e8400-e29b-41d4-a716-446655440000"
+                  provider: github
+                  receivedAt: "2026-04-02T10:00:00.000Z"
+                  rawBody: '{"ref":"refs/heads/main"}'
+                  signature: null
+                  parsedBody:
+                    ref: refs/heads/main
+                    repository:
+                      full_name: oriade/integration-platform
+      responses:
+        "200":
+          description: Updated DLQ entry with new payload
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DeadLetterEvent"
+        "404":
+          description: DLQ entry not found
+
+  /dlq/{id}/replay:
+    post:
+      operationId: replayDlqEntry
+      tags: [DLQ]
+      summary: Replay a dead-lettered event
+      description: |
+        Re-publishes the stored payload to the original NATS subject
+        (e.g. `webhook.received.v1` or `webhook.validated.v1`).
+
+        Before replaying, the idempotency record for the event is cleared
+        so the consumer will not skip it as a duplicate.
+
+        The entry status is set to `replayed` with a timestamp.
+      parameters:
+        - $ref: "#/components/parameters/DlqId"
+      responses:
+        "200":
+          description: Event replayed successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReplayResponse"
+              example:
+                replayedTo: webhook.received.v1
+        "404":
+          description: DLQ entry not found or already replayed
+
+components:
+  parameters:
+    DlqId:
+      name: id
+      in: path
+      required: true
+      description: UUID of the DLQ entry
+      schema:
+        type: string
+        format: uuid
+        example: "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+  schemas:
+    WebhookAcceptedResponse:
+      type: object
+      required: [message, accepted, eventId]
+      properties:
+        message:
+          type: string
+          example: Webhook accepted
+        accepted:
+          type: boolean
+          example: true
+        eventId:
+          type: string
+          format: uuid
+          description: Unique event ID assigned by the API Gateway. Use this to track the webhook through the processing pipeline.
+          example: "550e8400-e29b-41d4-a716-446655440000"
+
+    DeadLetterEvent:
+      type: object
+      required:
+        - id
+        - originalSubject
+        - originalStream
+        - originalSequence
+        - failedConsumer
+        - deadLetterReason
+        - status
+        - deadLetteredAt
+        - createdAt
+        - updatedAt
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+        eventId:
+          type: string
+          nullable: true
+          description: Event ID extracted from payload, if available
+          example: "550e8400-e29b-41d4-a716-446655440000"
+        originalSubject:
+          type: string
+          description: The NATS subject the message was originally published to
+          example: webhook.received.v1
+        originalStream:
+          type: string
+          description: The NATS stream the message belonged to
+          example: WEBHOOKS
+        originalSequence:
+          type: integer
+          description: Stream sequence number of the original message
+          example: 42
+        failedConsumer:
+          type: string
+          description: The durable consumer that exhausted all delivery attempts
+          example: webhook-processor-received-v1
+        deadLetterReason:
+          type: string
+          example: max_deliver_exceeded
+        payload:
+          type: object
+          nullable: true
+          additionalProperties: true
+          description: The original (or corrected) event payload
+        status:
+          type: string
+          enum: [pending, replayed]
+          example: pending
+        deadLetteredAt:
+          type: string
+          format: date-time
+          example: "2026-04-02T12:05:00.000Z"
+        replayedAt:
+          type: string
+          format: date-time
+          nullable: true
+          example: null
+        createdAt:
+          type: string
+          format: date-time
+          example: "2026-04-02T12:05:00.000Z"
+        updatedAt:
+          type: string
+          format: date-time
+          example: "2026-04-02T12:05:00.000Z"
+
+    ReplayResponse:
+      type: object
+      required: [replayedTo]
+      properties:
+        replayedTo:
+          type: string
+          description: The NATS subject the event was republished to
+          example: webhook.received.v1

@@ -1,0 +1,55 @@
+services:
+  nats:
+    image: nats:2.11-alpine
+    container_name: integration-platform-nats
+    ports:
+      - "4222:4222"
+      - "8222:8222"
+    command: ["-js", "-m", "8222"]
+
+  api-gateway:
+    build:
+      context: ../..
+      dockerfile: apps/api-gateway/Dockerfile
+    container_name: integration-platform-api-gateway
+    ports:
+      - "3000:3000"
+    environment:
+      PORT: 3000
+      NATS_SERVERS: nats://nats:4222
+    depends_on:
+      - nats
+
+  webhook-processor:
+    build:
+      context: ../..
+      dockerfile: apps/webhook-processor/Dockerfile
+    container_name: integration-platform-webhook-processor
+    ports:
+      - "3001:3001"
+    environment:
+      PORT: 3001
+      NATS_SERVERS: nats://nats:4222
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_USER: postgres
+      DB_PASSWORD: postgres
+      DB_NAME: integration_platform
+    depends_on:
+      - nats
+      - postgres
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: integration-platform-postgres
+    ports:
+      - "5434:5432"
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: integration_platform
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+volumes:
+  postgres_data:
