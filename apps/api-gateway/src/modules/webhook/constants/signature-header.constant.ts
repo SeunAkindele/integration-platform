@@ -1,4 +1,4 @@
-import { WebhookProvider } from "../../../../../../libs/common/enums/webhook-provider.enum";
+import { WebhookProvider } from "@libs/common/enums/webhook-provider.enum";
 
 export const SIGNATURE_HEADER_BY_PROVIDER: Record<WebhookProvider, string> = {
     [WebhookProvider.STRIPE]: "stripe-signature",

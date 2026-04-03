@@ -3,7 +3,7 @@ import {
     Logger,
     NotFoundException,
   } from "@nestjs/common";
-  import { WebhookValidatedEvent } from "../../../../libs/contracts/events/webhook-validated.event";
+  import { WebhookValidatedEvent } from "@libs/contracts/events/webhook-validated.event";
   import { GithubAdapter } from "../adapters/github.adapter";
   import { SlackAdapter } from "../adapters/slack.adapter";
   import { StripeAdapter } from "../adapters/stripe.adapter";

@@ -1,9 +1,9 @@
 import { Injectable, Logger, OnModuleInit } from "@nestjs/common";
-import { JetStreamService } from "../../../../libs/messaging/jetstream.service";
-import { Publisher } from "../../../../libs/messaging/publisher";
-import { SUBJECTS } from "../../../../libs/contracts/subjects";
-import { WebhookValidatedEvent } from "../../../../libs/contracts/events/webhook-validated.event";
-import { IntegrationProcessedEvent } from "../../../../libs/contracts/events/integration-processed.event";
+import { JetStreamService } from "@libs/messaging/jetstream.service";
+import { Publisher } from "@libs/messaging/publisher";
+import { SUBJECTS } from "@libs/contracts/subjects";
+import { WebhookValidatedEvent } from "@libs/contracts/events/webhook-validated.event";
+import { IntegrationProcessedEvent } from "@libs/contracts/events/integration-processed.event";
 import { IntegrationRouterService } from "../services/integration-router.service";
 import { ConsumerFactory } from "@libs/messaging/consumer.factory";
 

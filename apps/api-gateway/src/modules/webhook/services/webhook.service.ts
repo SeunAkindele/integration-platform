@@ -1,8 +1,8 @@
 import { Injectable } from "@nestjs/common";
 import { randomUUID } from "crypto";
-import { Publisher } from "../../../../../../libs/messaging/publisher";
-import { SUBJECTS } from "../../../../../../libs/contracts/subjects";
-import { WebhookReceivedEvent } from "../../../../../../libs/contracts/events/webhook-received.event";
+import { Publisher } from "@libs/messaging/publisher";
+import { SUBJECTS } from "@libs/contracts/subjects";
+import { WebhookReceivedEvent } from "@libs/contracts/events/webhook-received.event";
 import { AcceptWebhookInput } from "../interfaces/accept-webhook.input";
 import { SIGNATURE_HEADER_BY_PROVIDER } from "../constants/signature-header.constant";
 

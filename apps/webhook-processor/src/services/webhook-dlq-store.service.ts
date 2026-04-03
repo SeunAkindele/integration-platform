@@ -2,7 +2,7 @@ import { Injectable, Logger } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
 import { Repository } from "typeorm";
 import { DeadLetterEventEntity } from "../entities/dead-letter-event.entity";
-import { WebhookDlqEvent } from "../../../../libs/contracts/events/webhook-dlq.event";
+import { WebhookDlqEvent } from "@libs/contracts/events/webhook-dlq.event";
 
 @Injectable()
 export class WebhookDlqStoreService {

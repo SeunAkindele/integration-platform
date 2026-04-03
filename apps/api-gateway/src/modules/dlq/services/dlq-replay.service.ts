@@ -3,7 +3,7 @@ import { InjectRepository } from "@nestjs/typeorm";
 import { Repository } from "typeorm";
 import { DeadLetterEventEntity } from "../../../../../../apps/webhook-processor/src/entities/dead-letter-event.entity";
 import { ProcessedEventEntity } from "../../../../../../apps/webhook-processor/src/entities/processed-event.entity";
-import { Publisher } from "../../../../../../libs/messaging/publisher";
+import { Publisher } from "@libs/messaging/publisher";
 
 @Injectable()
 export class DlqReplayService {
@@ -39,6 +39,8 @@ export class DlqReplayService {
   ): Promise<DeadLetterEventEntity> {
     const entry = await this.findOne(id);
     entry.payload = payload;
+    entry.status = "pending";
+    entry.replayedAt = null;
     return this.dlqRepo.save(entry);
   }
 

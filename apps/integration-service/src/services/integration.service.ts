@@ -1,7 +1,7 @@
 import { Injectable } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
 import { Repository } from "typeorm";
-import { WebhookValidatedEvent } from "../../../../libs/contracts/events/webhook-validated.event";
+import { WebhookValidatedEvent } from "@libs/contracts/events/webhook-validated.event";
 import { IntegrationEntity } from "../entities/integration.entity";
 
 @Injectable()

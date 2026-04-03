@@ -1,6 +1,6 @@
 import { Injectable, Logger, OnModuleInit } from "@nestjs/common";
 import { JSONCodec } from "nats";
-import { JetStreamService } from "../../../../libs/messaging/jetstream.service";
+import { JetStreamService } from "@libs/messaging/jetstream.service";
 import { WebhookDlqService } from "../services/webhook-dlq.service";
 
 type MaxDeliverAdvisory = {

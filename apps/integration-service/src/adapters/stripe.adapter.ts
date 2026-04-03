@@ -1,5 +1,5 @@
 import { Injectable, Logger } from "@nestjs/common";
-import { WebhookValidatedEvent } from "../../../../libs/contracts/events/webhook-validated.event";
+import { WebhookValidatedEvent } from "@libs/contracts/events/webhook-validated.event";
 import { IntegrationAdapterResult } from "../types/integration-adapter-result";
 
 @Injectable()

@@ -1,8 +1,8 @@
 import { Injectable, Logger } from "@nestjs/common";
 import { JSONCodec } from "nats";
-import { JetStreamService } from "../../../../libs/messaging/jetstream.service";
-import { SUBJECTS } from "../../../../libs/contracts/subjects";
-import { WebhookDlqEvent } from "../../../../libs/contracts/events/webhook-dlq.event";
+import { JetStreamService } from "@libs/messaging/jetstream.service";
+import { SUBJECTS } from "@libs/contracts/subjects";
+import { WebhookDlqEvent } from "@libs/contracts/events/webhook-dlq.event";
 import { WebhookDlqStoreService } from "./webhook-dlq-store.service";
 
 @Injectable()

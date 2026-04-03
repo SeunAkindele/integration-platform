@@ -1,9 +1,9 @@
 import { Injectable, Logger, OnModuleInit } from "@nestjs/common";
 import { EventProcessingService } from "../services/event-processing.service";
-import { SUBJECTS } from "../../../../libs/contracts/subjects";
-import { WebhookReceivedEvent } from "../../../../libs/contracts/events/webhook-received.event";
-import { JetStreamService } from "../../../../libs/messaging/jetstream.service";
-import { ConsumerFactory } from "../../../../libs/messaging/consumer.factory";
+import { SUBJECTS } from "@libs/contracts/subjects";
+import { WebhookReceivedEvent } from "@libs/contracts/events/webhook-received.event";
+import { JetStreamService } from "@libs/messaging/jetstream.service";
+import { ConsumerFactory } from "@libs/messaging/consumer.factory";
 
 @Injectable()
 export class WebhookReceivedConsumer implements OnModuleInit {

@@ -9,7 +9,7 @@ import { EventProcessingService } from "./services/event-processing.service";
 import { WebhookEventEntity } from "./entities/webhook-event.entity";
 import { ProcessedEventEntity } from "./entities/processed-event.entity";
 import { DeadLetterEventEntity } from "./entities/dead-letter-event.entity";
-import { NatsModule } from "../../../libs/messaging/nats.module";
+import { NatsModule } from "@libs/messaging/nats.module";
 import { WebhookDlqAdvisoryConsumer } from "./consumers/webhook-dlq-advisory.consumer";
 import { WebhookDlqService } from "./services/webhook-dlq.service";
 import { WebhookDlqStoreService } from "./services/webhook-dlq-store.service";

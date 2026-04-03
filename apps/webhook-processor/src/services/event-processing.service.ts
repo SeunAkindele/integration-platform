@@ -3,13 +3,13 @@ import {
     Injectable,
     Logger,
   } from "@nestjs/common";
-  import { WebhookReceivedEvent } from "../../../../libs/contracts/events/webhook-received.event";
-  import { WebhookValidatedEvent } from "../../../../libs/contracts/events/webhook-validated.event";
-  import { SUBJECTS } from "../../../../libs/contracts/subjects";
+  import { WebhookReceivedEvent } from "@libs/contracts/events/webhook-received.event";
+  import { WebhookValidatedEvent } from "@libs/contracts/events/webhook-validated.event";
+  import { SUBJECTS } from "@libs/contracts/subjects";
   import { SignatureVerificationService } from "./signature-verification.service";
   import { IdempotencyService } from "./idempotency.service";
   import { WebhookEventStoreService } from "./webhook-event-store.service";
-  import { Publisher } from "../../../../libs/messaging/publisher";
+  import { Publisher } from "@libs/messaging/publisher";
   
   @Injectable()
   export class EventProcessingService {
