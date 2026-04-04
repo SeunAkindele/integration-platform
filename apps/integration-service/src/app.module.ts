@@ -9,6 +9,7 @@ import { SlackAdapter } from "./adapters/slack.adapter";
 import { StripeAdapter } from "./adapters/stripe.adapter";
 import { NatsModule } from "@libs/messaging/nats.module";
 import { IntegrationEntity } from "./entities/integration.entity";
+import { CreateIntegrationsTable1711990000000 } from "./migrations/1711990000000-CreateIntegrationTable";
 
 @Module({
   imports: [
@@ -25,6 +26,10 @@ import { IntegrationEntity } from "./entities/integration.entity";
         database: config.get<string>("DB_NAME", "integration_platform"),
         autoLoadEntities: true,
         synchronize: false,
+        migrationsRun: true,
+        migrations: [
+          CreateIntegrationsTable1711990000000,
+        ],
         logging: false,
       }),
     }),
