@@ -14,9 +14,6 @@ import { WebhookDlqAdvisoryConsumer } from "./consumers/webhook-dlq-advisory.con
 import { WebhookDlqService } from "./services/webhook-dlq.service";
 import { WebhookDlqStoreService } from "./services/webhook-dlq-store.service";
 import { DlqResponderService } from "./services/dlq-responder.service";
-import { CreateWebhookProcessorTables1710000000000 } from "./migrations/1710000000000-CreateWebhookProcessorTables";
-import { CreateDeadLetterEventsTable1712050000000 } from "./migrations/1712050000000-CreateDeadLetterEventsTable";
-import { AddReplayColumnsToDeadLetterEvents1712150000000 } from "./migrations/1712150000000-AddReplayColumnsToDeadLetterEvents";
 
 @Module({
   imports: [
@@ -34,12 +31,6 @@ import { AddReplayColumnsToDeadLetterEvents1712150000000 } from "./migrations/17
         database: config.get<string>("DB_NAME", "integration_platform"),
         autoLoadEntities: true,
         synchronize: false,
-        migrationsRun: true,
-        migrations: [
-          CreateWebhookProcessorTables1710000000000,
-          CreateDeadLetterEventsTable1712050000000,
-          AddReplayColumnsToDeadLetterEvents1712150000000,
-        ],
         logging: false,
       }),
     }),
