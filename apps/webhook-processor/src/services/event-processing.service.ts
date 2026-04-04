@@ -43,7 +43,7 @@ import {
         event.rawBody,
         event.signature,
       );
-      // throw new BadRequestException("Invalid webhook signature");
+      
       if (!isValid) {
         await this.webhookEventStoreService.markFailed(
           event.eventId,

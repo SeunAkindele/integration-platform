@@ -48,15 +48,22 @@ export class WebhookService {
     headers: Record<string, string | string[] | undefined>,
     provider: string,
   ): string | null {
-    const headerName = SIGNATURE_HEADER_BY_PROVIDER[provider];
-    return headerName ? this.getHeader(headers, headerName) : null;
+    const key = provider.toLowerCase() as keyof typeof SIGNATURE_HEADER_BY_PROVIDER;
+    const headerName = SIGNATURE_HEADER_BY_PROVIDER[key];
+    if (!headerName) return null;
+    const lower = headerName.toLowerCase();
+    return (
+      this.getHeader(headers, lower) ??
+      this.getHeader(headers, headerName)
+    );
   }
 
   private getHeader(
     headers: Record<string, string | string[] | undefined>,
     key: string,
   ): string | null {
-    const value = headers[key];
+    const lower = key.toLowerCase();
+    const value = headers[lower] ?? headers[key];
     if (Array.isArray(value)) return value[0] ?? null;
     return value ?? null;
   }

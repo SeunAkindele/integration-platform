@@ -1,79 +1,62 @@
-import { Injectable, Logger, NotFoundException } from "@nestjs/common";
-import { InjectRepository } from "@nestjs/typeorm";
-import { Repository } from "typeorm";
-import { DeadLetterEventEntity } from "../../../../../../apps/webhook-processor/src/entities/dead-letter-event.entity";
-import { ProcessedEventEntity } from "../../../../../../apps/webhook-processor/src/entities/processed-event.entity";
-import { Publisher } from "@libs/messaging/publisher";
+import { Injectable, Logger, HttpException, HttpStatus } from "@nestjs/common";
+import { JSONCodec } from "nats";
+import { JetStreamService } from "@libs/messaging/jetstream.service";
+import { SUBJECTS } from "@libs/contracts/subjects";
+import {
+  DlqEntryResponse,
+  DlqReplayResponse,
+  DlqErrorResponse,
+} from "@libs/contracts/events/dlq-request.event";
+
+const REQUEST_TIMEOUT_MS = 5000;
 
 @Injectable()
 export class DlqReplayService {
   private readonly logger = new Logger(DlqReplayService.name);
+  private readonly json = JSONCodec();
 
-  constructor(
-    @InjectRepository(DeadLetterEventEntity)
-    private readonly dlqRepo: Repository<DeadLetterEventEntity>,
-    @InjectRepository(ProcessedEventEntity)
-    private readonly processedEventRepo: Repository<ProcessedEventEntity>,
-    private readonly publisher: Publisher,
-  ) {}
+  constructor(private readonly jetStreamService: JetStreamService) {}
 
-  async findAll(status?: "pending" | "replayed"): Promise<DeadLetterEventEntity[]> {
-    const where = status ? { status } : {};
-    return this.dlqRepo.find({
-      where,
-      order: { createdAt: "DESC" },
-    });
+  async findAll(status?: "pending" | "replayed"): Promise<DlqEntryResponse[]> {
+    return this.request<DlqEntryResponse[]>(SUBJECTS.DLQ_RPC_LIST, { status });
   }
 
-  async findOne(id: string): Promise<DeadLetterEventEntity> {
-    const entry = await this.dlqRepo.findOne({ where: { id } });
-    if (!entry) {
-      throw new NotFoundException(`DLQ entry ${id} not found`);
-    }
-    return entry;
+  async findOne(id: string): Promise<DlqEntryResponse> {
+    return this.request<DlqEntryResponse>(SUBJECTS.DLQ_RPC_FIND_ONE, { id });
   }
 
   async updatePayload(
     id: string,
     payload: Record<string, unknown>,
-  ): Promise<DeadLetterEventEntity> {
-    const entry = await this.findOne(id);
-    entry.payload = payload;
-    entry.status = "pending";
-    entry.replayedAt = null;
-    return this.dlqRepo.save(entry);
+  ): Promise<DlqEntryResponse> {
+    return this.request<DlqEntryResponse>(SUBJECTS.DLQ_RPC_UPDATE_PAYLOAD, { id, payload });
   }
 
-  async replay(id: string): Promise<{ replayedTo: string }> {
-    const entry = await this.findOne(id);
+  async replay(id: string): Promise<DlqReplayResponse> {
+    return this.request<DlqReplayResponse>(SUBJECTS.DLQ_RPC_REPLAY, { id });
+  }
 
-    if (entry.status === "replayed") {
-      throw new NotFoundException(`DLQ entry ${id} has already been replayed`);
+  private async request<T>(subject: string, data: unknown): Promise<T> {
+    const nc = this.jetStreamService.getConnection();
+    const msg = await nc.request(subject, this.json.encode(data), {
+      timeout: REQUEST_TIMEOUT_MS,
+    });
+
+    const response = this.json.decode(msg.data) as T | DlqErrorResponse;
+
+    if (this.isErrorResponse(response)) {
+      throw new HttpException(response.error, response.statusCode);
     }
 
-    if (entry.eventId) {
-      await this.clearIdempotencyRecord(entry.eventId);
-    }
+    return response as T;
+  }
 
-    await this.publisher.publish(entry.originalSubject, entry.payload);
-
-    entry.status = "replayed";
-    entry.replayedAt = new Date();
-    await this.dlqRepo.save(entry);
-
-    this.logger.log(
-      `Replayed DLQ entry id=${id} eventId=${entry.eventId} to subject=${entry.originalSubject}`,
+  private isErrorResponse(response: unknown): response is DlqErrorResponse {
+    return (
+      response != null &&
+      typeof response === "object" &&
+      "error" in response &&
+      "statusCode" in response
     );
-
-    return { replayedTo: entry.originalSubject };
-  }
-
-  private async clearIdempotencyRecord(eventId: string): Promise<void> {
-    const result = await this.processedEventRepo.delete({ eventId });
-    if (result.affected) {
-      this.logger.log(
-        `Cleared idempotency record for eventId=${eventId} to allow replay`,
-      );
-    }
   }
 }
