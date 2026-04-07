@@ -1,0 +1,47 @@
+name: instance-identity-stack
+
+# Operation 2: backends have no host `ports:` (internal network only).
+# Operation 3: nginx is the only published HTTP entry (host 8080 -> container 80).
+# Operation 4: ./scripts/verify-load-balance.sh http://127.0.0.1:8080 50
+#
+# Start: docker compose up -d --build
+# Spot check:
+#   curl -s http://127.0.0.1:8080/
+# Direct to a backend (attach to stack network):
+#   docker run --rm --network instance-identity-stack_instance-identity curlimages/curl:8.11.1 \
+#     curl -s http://instance-identity-a:3000/
+
+services:
+  instance-identity-a:
+    build: .
+    environment:
+      INSTANCE_ID: replica-a
+      SERVICE_NAME: instance-identity
+      PORT: "3000"
+    networks:
+      - instance-identity
+
+  instance-identity-b:
+    build: .
+    environment:
+      INSTANCE_ID: replica-b
+      SERVICE_NAME: instance-identity
+      PORT: "3000"
+    networks:
+      - instance-identity
+
+  nginx:
+    image: nginx:1.27-alpine
+    depends_on:
+      - instance-identity-a
+      - instance-identity-b
+    ports:
+      - "8080:80"
+    volumes:
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    networks:
+      - instance-identity
+
+networks:
+  instance-identity:
+    driver: bridge
