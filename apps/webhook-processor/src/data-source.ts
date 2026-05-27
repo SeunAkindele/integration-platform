@@ -13,6 +13,7 @@ export default new DataSource({
   username: process.env.DB_USER || "postgres",
   password: process.env.DB_PASSWORD || "postgres",
   database: process.env.DB_NAME || "integration_platform",
+  ssl: process.env.DB_SSL === "true" ? { rejectUnauthorized: false } : false,
   entities: [WebhookEventEntity, ProcessedEventEntity, DeadLetterEventEntity],
   migrations: [
     "apps/webhook-processor/src/migrations/*.ts",
