@@ -1,4 +1,4 @@
-import { Injectable, Logger, HttpException, HttpStatus } from "@nestjs/common";
+import { Injectable, Logger, HttpException } from "@nestjs/common";
 import { JSONCodec } from "nats";
 import { JetStreamService } from "@libs/messaging/jetstream.service";
 import { SUBJECTS } from "@libs/contracts/subjects";
