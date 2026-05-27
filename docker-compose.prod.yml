@@ -8,6 +8,7 @@ services:
 
   api-gateway:
     image: ${ECR_REGISTRY}/api-gateway:${IMAGE_TAG:-latest}
+    pull_policy: never
     ports:
       - "3000:3000"
     environment:
@@ -24,6 +25,7 @@ services:
 
   webhook-processor:
     image: ${ECR_REGISTRY}/webhook-processor:${IMAGE_TAG:-latest}
+    pull_policy: never
     environment:
       NATS_SERVERS: nats://nats:4222
       DB_HOST: ${DB_HOST}
@@ -37,6 +39,7 @@ services:
 
   integration-service:
     image: ${ECR_REGISTRY}/integration-service:${IMAGE_TAG:-latest}
+    pull_policy: never
     environment:
       NATS_SERVERS: nats://nats:4222
       DB_HOST: ${DB_HOST}
