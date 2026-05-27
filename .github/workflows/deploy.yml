@@ -54,16 +54,16 @@ jobs:
           username: ec2-user
           key: ${{ secrets.EC2_SSH_KEY }}
           script: |
-            # 1. Navigate to your application folder first
+            # 1. Navigate to your app directory first
             cd /home/ec2-user/app
 
-            # 2. Authenticate Docker with your AWS ECR Registry
-            aws ecr get-login-password --region eu-west-1 | docker login --username AWS --password-stdin ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.eu-west-1.amazonaws.com
+            # 2. Log in using explicit environment variables to bypass "Unable to locate credentials"
+            AWS_ACCESS_KEY_ID="${{ secrets.AWS_ACCESS_KEY_ID }}" AWS_SECRET_ACCESS_KEY="${{ secrets.AWS_SECRET_ACCESS_KEY }}" aws ecr get-login-password --region eu-west-1 | docker login --username AWS --password-stdin 560288547338.dkr.ecr.eu-west-1.amazonaws.com
 
-            # 3. Pull the updated images from your repository
-            docker pull ${{ secrets.AWS_ACCOUNT_ID }}://
-            docker pull ${{ secrets.AWS_ACCOUNT_ID }}://
-            docker pull ${{ secrets.AWS_ACCOUNT_ID }}://
+            # 3. Pull the updated images (Hardcoded with your correct '5' Account ID to completely bypass your GitHub Secret typo)
+            docker pull 560288547338.dkr.ecr.eu-west-1.amazonaws.com/api-gateway:latest
+            docker pull 560288547338.dkr.ecr.eu-west-1.amazonaws.com/webhook-processor:latest
+            docker pull 560288547338.dkr.ecr.eu-west-1.amazonaws.com/integration-service:latest
 
             # 4. Recreate your containers cleanly using the freshly pulled images
             docker-compose -f docker-compose.prod.yml down
