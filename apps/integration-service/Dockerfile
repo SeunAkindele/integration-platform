@@ -14,7 +14,7 @@ COPY libs ./libs
 
 RUN pnpm install --frozen-lockfile --ignore-scripts
 RUN pnpm run build:integration-service
- 
+
 FROM node:22-alpine AS runner
 
 WORKDIR /app
