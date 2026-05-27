@@ -1,0 +1,52 @@
+services:
+  nats:
+    image: nats:2.11-alpine
+    command: ["-js", "-m", "8222", "--store_dir", "/data"]
+    volumes:
+      - nats-data:/data
+    restart: unless-stopped
+
+  api-gateway:
+    image: ${ECR_REGISTRY}/api-gateway:${IMAGE_TAG:-latest}
+    ports:
+      - "3000:3000"
+    environment:
+      PORT: 3000
+      NATS_SERVERS: nats://nats:4222
+      DB_HOST: ${DB_HOST}
+      DB_PORT: 5432
+      DB_USER: ${DB_USER}
+      DB_PASSWORD: ${DB_PASSWORD}
+      DB_NAME: integration_platform
+    depends_on:
+      - nats
+    restart: unless-stopped
+
+  webhook-processor:
+    image: ${ECR_REGISTRY}/webhook-processor:${IMAGE_TAG:-latest}
+    environment:
+      NATS_SERVERS: nats://nats:4222
+      DB_HOST: ${DB_HOST}
+      DB_PORT: 5432
+      DB_USER: ${DB_USER}
+      DB_PASSWORD: ${DB_PASSWORD}
+      DB_NAME: integration_platform
+    depends_on:
+      - nats
+    restart: unless-stopped
+
+  integration-service:
+    image: ${ECR_REGISTRY}/integration-service:${IMAGE_TAG:-latest}
+    environment:
+      NATS_SERVERS: nats://nats:4222
+      DB_HOST: ${DB_HOST}
+      DB_PORT: 5432
+      DB_USER: ${DB_USER}
+      DB_PASSWORD: ${DB_PASSWORD}
+      DB_NAME: integration_platform
+    depends_on:
+      - nats
+    restart: unless-stopped
+
+volumes:
+  nats-data:
