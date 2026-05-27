@@ -12,7 +12,7 @@ COPY tsconfig*.json ./
 COPY apps ./apps
 COPY libs ./libs
 
-RUN pnpm install --frozen-lockfile
+RUN pnpm install --frozen-lockfile --ignore-scripts
 RUN pnpm run build:webhook-processor
 
 FROM node:22-alpine AS runner
@@ -29,7 +29,7 @@ COPY package.json ./
 COPY pnpm-lock.yaml ./
 COPY pnpm-workspace.yaml ./
 
-RUN pnpm install --prod --frozen-lockfile
+RUN pnpm install --prod --frozen-lockfile --ignore-scripts
 
 COPY --from=builder /app/dist ./dist
 
