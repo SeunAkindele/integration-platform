@@ -65,6 +65,15 @@ jobs:
             docker pull ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.eu-west-1.amazonaws.com/webhook-processor:latest
             docker pull ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.eu-west-1.amazonaws.com/integration-service:latest
 
-            # 4. Recreate your containers cleanly using the freshly pulled images
+            # 4. Run database migrations
+            docker run --rm --env-file /home/ec2-user/app/.env \
+              ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.eu-west-1.amazonaws.com/webhook-processor:latest \
+              node dist-migrations/apps/webhook-processor/src/run-migrations.js
+
+            docker run --rm --env-file /home/ec2-user/app/.env \
+              ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.eu-west-1.amazonaws.com/integration-service:latest \
+              node dist-migrations/apps/integration-service/src/run-migrations.js
+
+            # 5. Recreate your containers cleanly using the freshly pulled images
             docker-compose -f docker-compose.prod.yml down
             docker-compose -f docker-compose.prod.yml up -d

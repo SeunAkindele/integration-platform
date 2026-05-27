@@ -19,6 +19,7 @@ services:
       DB_USER: ${DB_USER}
       DB_PASSWORD: ${DB_PASSWORD}
       DB_NAME: integration_platform
+      DB_SSL: "true"
     depends_on:
       - nats
     restart: unless-stopped
@@ -33,6 +34,7 @@ services:
       DB_USER: ${DB_USER}
       DB_PASSWORD: ${DB_PASSWORD}
       DB_NAME: integration_platform
+      DB_SSL: "true"
     depends_on:
       - nats
     restart: unless-stopped
@@ -47,6 +49,7 @@ services:
       DB_USER: ${DB_USER}
       DB_PASSWORD: ${DB_PASSWORD}
       DB_NAME: integration_platform
+      DB_SSL: "true"
     depends_on:
       - nats
     restart: unless-stopped
