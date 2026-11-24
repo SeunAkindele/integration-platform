@@ -42,6 +42,7 @@ import {
         event.provider,
         event.rawBody,
         event.signature,
+        { headers: event.headers, receivedAt: event.receivedAt },
       );
       
       if (!isValid) {
