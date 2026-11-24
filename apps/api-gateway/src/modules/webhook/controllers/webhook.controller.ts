@@ -1,7 +1,10 @@
-import { Body, Controller, HttpCode, HttpStatus, Param, Post, RawBodyRequest, Req } from "@nestjs/common";
-import { Request } from "express";
+import { Body, Controller, HttpCode, HttpStatus, NotFoundException, Param, Post, RawBodyRequest, Req, Res } from "@nestjs/common";
+import type { Request, Response } from "express";
+import { WebhookProvider } from "@libs/common/enums/webhook-provider.enum";
 import { WebhookService } from "../services/webhook.service";
-  
+
+const SUPPORTED_PROVIDERS = new Set<string>(Object.values(WebhookProvider));
+
 @Controller("webhooks")
 export class WebhookController {
     constructor(private readonly webhookService: WebhookService) {}
@@ -12,12 +15,30 @@ export class WebhookController {
         @Param("provider") provider: string,
         @Req() req: RawBodyRequest<Request>,
         @Body() _body: unknown,
+        @Res({ passthrough: true }) res: Response,
     ) {
+        // Reject typos like /webhooks/slac instead of silently queueing them.
+        const normalizedProvider = provider.toLowerCase();
+        if (!SUPPORTED_PROVIDERS.has(normalizedProvider)) {
+            throw new NotFoundException(`Unsupported webhook provider: ${provider}`);
+        }
+
+        // Slack's Request URL handshake: echo the challenge back with HTTP 200.
+        if (
+            normalizedProvider === WebhookProvider.SLACK &&
+            typeof _body === "object" &&
+            _body !== null &&
+            (_body as Record<string, unknown>).type === "url_verification"
+        ) {
+            res.status(HttpStatus.OK);
+            return { challenge: (_body as Record<string, unknown>).challenge };
+        }
+
         const rawBuffer = req.rawBody;
         const rawBody = rawBuffer ? rawBuffer.toString("utf8") : JSON.stringify(_body ?? {});
 
         const result = await this.webhookService.acceptWebhook({
-            provider,
+            provider: normalizedProvider,
             path: req.originalUrl ?? req.url,
             method: req.method,
             headers: req.headers,

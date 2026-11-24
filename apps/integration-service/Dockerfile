@@ -14,6 +14,11 @@ COPY libs ./libs
 
 RUN pnpm install --frozen-lockfile --ignore-scripts
 RUN pnpm run build:integration-service
+RUN npx tsc apps/integration-service/src/run-migrations.ts apps/integration-service/src/data-source.ts \
+    --outDir dist-migrations \
+    --esModuleInterop --resolveJsonModule --skipLibCheck \
+    --module commonjs --target ES2020 --moduleResolution node \
+    --experimentalDecorators --emitDecoratorMetadata
 
 FROM node:22-alpine AS runner
 
@@ -32,6 +37,7 @@ COPY pnpm-workspace.yaml ./
 RUN pnpm install --prod --frozen-lockfile --ignore-scripts
 
 COPY --from=builder /app/dist ./dist
+COPY --from=builder /app/dist-migrations ./dist-migrations
 
 EXPOSE 3002
 
