@@ -14,7 +14,7 @@ export class WebhookController {
         @Body() _body: unknown,
     ) {
         const rawBuffer = req.rawBody;
-        const rawBody = rawBuffer ? rawBuffer.toString("utf8") : JSON.stringify(_body ?? {});
+        const rawBody = rawBuffer.toString("utf8");
 
         const result = await this.webhookService.acceptWebhook({
             provider,
