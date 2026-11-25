@@ -1,8 +1,4 @@
-import {
-    BadRequestException,
-    Injectable,
-    Logger,
-  } from "@nestjs/common";
+import { Injectable, Logger } from "@nestjs/common";
   import { WebhookReceivedEvent } from "@libs/contracts/events/webhook-received.event";
   import { WebhookValidatedEvent } from "@libs/contracts/events/webhook-validated.event";
   import { SUBJECTS } from "@libs/contracts/subjects";
@@ -34,7 +30,9 @@ import {
       }
   
       const alreadyStored = await this.webhookEventStoreService.exists(event.eventId);
-      if (!alreadyStored) {
+      if (alreadyStored) {
+        await this.webhookEventStoreService.refreshReceivedEvent(event);
+      } else {
         await this.webhookEventStoreService.saveReceivedEvent(event);
       }
   
@@ -58,7 +56,10 @@ import {
           "Signature verification failed",
         );
   
-        throw new BadRequestException("Invalid webhook signature");
+        // Not retryable: NATS redelivery would fail the same way. Return so the message
+        // is acked; the failure is recorded on webhook_events and processed_events.
+        this.logger.warn(`Rejected eventId=${event.eventId}: invalid webhook signature`);
+        return;
       }
   
       await this.webhookEventStoreService.markValidated(event.eventId);
