@@ -12,6 +12,9 @@ export interface SignatureContext {
 /** Slack rejects requests whose timestamp is more than 5 minutes off. */
 const SLACK_MAX_TIMESTAMP_SKEW_SECONDS = 60 * 5;
 
+/** Stripe's default tolerance (matches the official SDK's constructEvent). */
+const STRIPE_MAX_TIMESTAMP_SKEW_SECONDS = 60 * 5;
+
 @Injectable()
 export class SignatureVerificationService {
   private readonly logger = new Logger(SignatureVerificationService.name);
@@ -37,13 +40,19 @@ export class SignatureVerificationService {
         );
         return false;
       }
+      if (p === WebhookProvider.STRIPE && process.env.STRIPE_WEBHOOK_SECRET) {
+        this.logger.warn(
+          "Stripe webhook: no stripe-signature while STRIPE_WEBHOOK_SECRET is set",
+        );
+        return false;
+      }
       this.logger.warn(`No signature provided for provider=${provider}`);
       return true;
     }
 
     switch (p) {
       case WebhookProvider.STRIPE:
-        return this.verifyStripeStub(rawBody, signature);
+        return this.verifyStripe(rawBody, signature, context);
 
       case WebhookProvider.GITHUB:
         return this.verifyGithub(rawBody, signature);
@@ -57,10 +66,63 @@ export class SignatureVerificationService {
     }
   }
 
-  private verifyStripeStub(rawBody: string, signature: string): boolean {
-    void rawBody;
-    void signature;
-    return true;
+  /**
+   * Stripe signing: https://docs.stripe.com/webhooks#verify-manually
+   * Header: "t=<unix>,v1=<hex>[,v1=<hex>...][,v0=...]"
+   * signature = HMAC-SHA256(endpointSecret, "{t}.{rawBody}"); any v1 may match
+   * (Stripe sends several while an endpoint secret is being rolled).
+   */
+  private verifyStripe(
+    rawBody: string,
+    signature: string,
+    context: SignatureContext,
+  ): boolean {
+    const secret = process.env.STRIPE_WEBHOOK_SECRET;
+    if (!secret) return true;
+
+    let timestamp: string | null = null;
+    const candidates: string[] = [];
+    for (const part of signature.split(",")) {
+      const idx = part.indexOf("=");
+      if (idx <= 0) continue;
+      const key = part.slice(0, idx).trim();
+      const value = part.slice(idx + 1).trim();
+      if (key === "t") timestamp = value;
+      else if (key === "v1" && value) candidates.push(value);
+    }
+
+    if (!timestamp || !/^\d+$/.test(timestamp)) {
+      this.logger.warn("Stripe webhook: missing or invalid timestamp in stripe-signature");
+      return false;
+    }
+    if (candidates.length === 0) {
+      this.logger.warn("Stripe webhook: no v1 signature in stripe-signature");
+      return false;
+    }
+
+    // Same replay window approach as Slack: measure against gateway receivedAt so
+    // NATS redeliveries and DLQ replays of a genuine event still verify.
+    const referenceSeconds = this.referenceSeconds(context);
+    if (Math.abs(referenceSeconds - Number(timestamp)) > STRIPE_MAX_TIMESTAMP_SKEW_SECONDS) {
+      this.logger.warn(
+        `Stripe webhook: timestamp ${timestamp} is outside the ${STRIPE_MAX_TIMESTAMP_SKEW_SECONDS}s window`,
+      );
+      return false;
+    }
+
+    const expected = crypto
+      .createHmac("sha256", secret)
+      .update(`${timestamp}.${rawBody}`)
+      .digest("hex");
+    const expectedBuf = Buffer.from(expected);
+
+    return candidates.some((candidate) => {
+      const candidateBuf = Buffer.from(candidate);
+      return (
+        candidateBuf.length === expectedBuf.length &&
+        crypto.timingSafeEqual(candidateBuf, expectedBuf)
+      );
+    });
   }
 
   private verifyGithub(rawBody: string, signature: string): boolean {
@@ -99,10 +161,7 @@ export class SignatureVerificationService {
 
     // Compare against when the gateway received the request, not "now", so NATS
     // redeliveries and DLQ replays of a genuine event still verify.
-    const receivedAtMs = context.receivedAt ? Date.parse(context.receivedAt) : NaN;
-    const referenceSeconds = Math.floor(
-      (Number.isNaN(receivedAtMs) ? Date.now() : receivedAtMs) / 1000,
-    );
+    const referenceSeconds = this.referenceSeconds(context);
     if (Math.abs(referenceSeconds - Number(timestamp)) > SLACK_MAX_TIMESTAMP_SKEW_SECONDS) {
       this.logger.warn(
         `Slack webhook: timestamp ${timestamp} is outside the ${SLACK_MAX_TIMESTAMP_SKEW_SECONDS}s window`,
@@ -119,6 +178,12 @@ export class SignatureVerificationService {
     const signatureBuf = Buffer.from(signature);
     if (expectedBuf.length !== signatureBuf.length) return false;
     return crypto.timingSafeEqual(expectedBuf, signatureBuf);
+  }
+
+  /** "Now" for replay checks: when the gateway received the request, else the clock. */
+  private referenceSeconds(context: SignatureContext): number {
+    const receivedAtMs = context.receivedAt ? Date.parse(context.receivedAt) : NaN;
+    return Math.floor((Number.isNaN(receivedAtMs) ? Date.now() : receivedAtMs) / 1000);
   }
 
   private getHeader(

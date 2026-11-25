@@ -224,11 +224,18 @@ Accepts a webhook from an external provider and queues it for asynchronous proce
 
 **Provider-specific signature headers:**
 
-| Provider | Header |
-|----------|--------|
-| GitHub | `x-hub-signature-256` |
-| Stripe | `stripe-signature` |
-| Slack | `x-slack-signature` |
+| Provider | Header | Verification | Secret (webhook-processor) |
+|----------|--------|--------------|----------------------------|
+| GitHub | `x-hub-signature-256` | `sha256=` HMAC-SHA256 of the raw body | `GITHUB_WEBHOOK_SECRET` |
+| Stripe | `stripe-signature` | `t=<unix>,v1=<hex>`: HMAC-SHA256 of `"{t}.{rawBody}"`, any `v1` may match, 5-minute timestamp window | `STRIPE_WEBHOOK_SECRET` |
+| Slack | `x-slack-signature` (+ `x-slack-request-timestamp`) | `v0=` HMAC-SHA256 of `"v0:{ts}:{rawBody}"`, 5-minute timestamp window | `SLACK_SIGNING_SECRET` |
+
+Verification happens asynchronously in the Webhook Processor, so the gateway always answers `202` for a
+supported provider; a request that fails verification is marked `failed` in `webhook_events`, not published.
+When a secret is unset, that provider's requests are accepted unverified (local development only).
+
+Stripe webhooks must be sent as `application/json`; the gateway rejects a Stripe request whose raw body
+it cannot capture with `400`, because Stripe signs the exact bytes.
 
 **Response:** `202 Accepted`
 
@@ -236,7 +243,7 @@ Accepts a webhook from an external provider and queues it for asynchronous proce
 {
   "message": "Webhook accepted",
   "accepted": true,
-  "eventId": "<uuid>"
+  "eventId": "stripe:evt_1PQ2R3S4T5U6V7W8X9"
 }
 ```
 
@@ -429,10 +436,10 @@ Stores events that exhausted all delivery attempts. Supports payload correction 
 
 ## Processing Pipeline
 
-1. **Receive** — API Gateway accepts the webhook, assigns an `eventId`, and publishes a `WebhookReceivedEvent` to NATS
-2. **Idempotency check** — Webhook Processor checks `processed_events` to skip duplicates
-3. **Store** — Webhook is saved to `webhook_events` with status `received`
-4. **Signature verification** — HMAC-SHA256 for GitHub; Stripe and Slack are stub implementations
+1. **Receive** — API Gateway accepts the webhook, assigns an `eventId`, and publishes a `WebhookReceivedEvent` to NATS. The `eventId` is the provider's own delivery id, so provider retries share it: `stripe:<evt_...>` (body `id`), `slack:<event_id>`, `github:<x-github-delivery>`; a random UUID is used when none is present
+2. **Idempotency check** — Webhook Processor checks `processed_events` and skips events already processed successfully (a `failed` record does not block a later retry)
+3. **Store** — Webhook is saved to `webhook_events` with status `received` (a retry overwrites the stored delivery)
+4. **Signature verification** — HMAC-SHA256 for GitHub, Stripe and Slack (see the signature table above); a failure is recorded and the message is acked, not retried
 5. **Status update** — `webhook_events.status` is set to `validated` or `failed`
 6. **Publish validated** — A `WebhookValidatedEvent` is published to `webhook.validated.v1`
 7. **Record** — An entry is added to `processed_events` for idempotency

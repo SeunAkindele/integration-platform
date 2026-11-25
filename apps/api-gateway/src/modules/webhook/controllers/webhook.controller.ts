@@ -1,4 +1,4 @@
-import { Body, Controller, HttpCode, HttpStatus, NotFoundException, Param, Post, RawBodyRequest, Req, Res } from "@nestjs/common";
+import { BadRequestException, Body, Controller, HttpCode, HttpStatus, NotFoundException, Param, Post, RawBodyRequest, Req, Res } from "@nestjs/common";
 import type { Request, Response } from "express";
 import { WebhookProvider } from "@libs/common/enums/webhook-provider.enum";
 import { WebhookService } from "../services/webhook.service";
@@ -35,6 +35,13 @@ export class WebhookController {
         }
 
         const rawBuffer = req.rawBody;
+        // Stripe signs the exact request bytes, so a re-serialized body can never verify.
+        // Reject instead of falling back (e.g. a content type Nest has no raw parser for).
+        if (!rawBuffer && normalizedProvider === WebhookProvider.STRIPE) {
+            throw new BadRequestException(
+                "Stripe webhooks must be sent as application/json so the raw body can be verified",
+            );
+        }
         const rawBody = rawBuffer ? rawBuffer.toString("utf8") : JSON.stringify(_body ?? {});
 
         const result = await this.webhookService.acceptWebhook({
