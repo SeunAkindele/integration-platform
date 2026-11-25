@@ -5,6 +5,11 @@ import { SUBJECTS } from "@libs/contracts/subjects";
 import { WebhookReceivedEvent } from "@libs/contracts/events/webhook-received.event";
 import { AcceptWebhookInput } from "../interfaces/accept-webhook.input";
 import { SIGNATURE_HEADER_BY_PROVIDER } from "../constants/signature-header.constant";
+import { WebhookProvider } from "@libs/common/enums/webhook-provider.enum";
+
+/** Provider delivery ids we trust as dedupe keys: short, no whitespace or odd characters. */
+// 150 + "provider:" prefix stays under integrations.eventId varchar(191).
+const PROVIDER_EVENT_ID_PATTERN = /^[A-Za-z0-9_.:-]{1,150}$/;
 
 @Injectable()
 export class WebhookService {
@@ -15,7 +20,7 @@ export class WebhookService {
     const signature = this.extractSignature(input.headers, input.provider);
 
     const event: WebhookReceivedEvent = {
-      eventId: randomUUID(),
+      eventId: this.deriveEventId(input.provider, input.headers, parsedBody),
       provider: input.provider,
       receivedAt: new Date().toISOString(),
       path: input.path,
@@ -34,6 +39,41 @@ export class WebhookService {
       accepted: true,
       eventId: event.eventId,
     };
+  }
+
+  /**
+   * Providers retry a delivery with the same id, so we key idempotency on that id
+   * instead of a fresh UUID per HTTP request:
+   *   stripe -> body.id (evt_...), slack -> body.event_id, github -> x-github-delivery.
+   * Namespaced by provider; falls back to a random UUID when no usable id exists.
+   */
+  private deriveEventId(
+    provider: string,
+    headers: Record<string, string | string[] | undefined>,
+    parsedBody: unknown,
+  ): string {
+    const body =
+      parsedBody && typeof parsedBody === "object" && !Array.isArray(parsedBody)
+        ? (parsedBody as Record<string, unknown>)
+        : {};
+
+    let providerEventId: unknown = null;
+    switch (provider.toLowerCase()) {
+      case WebhookProvider.STRIPE:
+        providerEventId = body.id;
+        break;
+      case WebhookProvider.SLACK:
+        providerEventId = body.event_id;
+        break;
+      case WebhookProvider.GITHUB:
+        providerEventId = this.getHeader(headers, "x-github-delivery");
+        break;
+    }
+
+    if (typeof providerEventId === "string" && PROVIDER_EVENT_ID_PATTERN.test(providerEventId)) {
+      return `${provider.toLowerCase()}:${providerEventId}`;
+    }
+    return randomUUID();
   }
 
   private safeParseJson(rawBody: string): unknown {

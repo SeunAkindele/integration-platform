@@ -45,7 +45,8 @@ paths:
       tags: [Webhooks]
       summary: Receive a webhook from any supported provider
       description: |
-        Accepts any JSON payload from a provider, assigns a unique `eventId`,
+        Accepts any JSON payload from a provider, assigns an `eventId` (the provider's
+        delivery id when present, e.g. `stripe:evt_...`, otherwise a random UUID),
         and publishes a `WebhookReceivedEvent` to NATS JetStream for asynchronous
         processing. Returns immediately with `202 Accepted`.
 
@@ -84,7 +85,11 @@ paths:
         - name: stripe-signature
           in: header
           required: false
-          description: "Stripe signature. Format: `t=<timestamp>,v1=<signature>`"
+          description: |
+            Stripe signature. Format: `t=<timestamp>,v1=<signature>[,v1=<signature>...]`.
+            Verified in the Webhook Processor with `STRIPE_WEBHOOK_SECRET`: HMAC-SHA256 of
+            `"{t}.{rawBody}"`, any `v1` may match, and `t` must be within 5 minutes of receipt.
+            The body must be sent as `application/json` and is verified byte-for-byte.
           schema:
             type: string
             example: "t=1742292900,v1=5257a869e7ecebeda32affa62cdca3fa51cad7e77a0e56ff536d0ce8e108d8bd"
@@ -162,7 +167,11 @@ paths:
               example:
                 message: Webhook accepted
                 accepted: true
-                eventId: "550e8400-e29b-41d4-a716-446655440000"
+                eventId: "stripe:evt_1PQ2R3S4T5U6V7W8X9"
+        "400":
+          description: Stripe request whose raw body could not be captured (not sent as `application/json`)
+        "404":
+          description: Unsupported provider
 
   /dlq:
     get:
@@ -301,9 +310,11 @@ components:
           example: true
         eventId:
           type: string
-          format: uuid
-          description: Unique event ID assigned by the API Gateway. Use this to track the webhook through the processing pipeline.
-          example: "550e8400-e29b-41d4-a716-446655440000"
+          description: |
+            Event ID used to track the webhook through the pipeline and to dedupe provider retries.
+            `<provider>:<provider delivery id>` when the provider sends one (`stripe:evt_...`,
+            `slack:Ev...`, `github:<x-github-delivery>`), otherwise a random UUID.
+          example: "stripe:evt_1PQ2R3S4T5U6V7W8X9"
 
     DeadLetterEvent:
       type: object

@@ -27,8 +27,31 @@ export class WebhookEventStoreService {
     return this.webhookEventRepo.save(entity);
   }
 
+  /**
+   * A provider retry arrives with the same eventId. Overwrite the stored delivery so the
+   * row reflects the request actually being verified, not an earlier (possibly forged) one.
+   */
+  async refreshReceivedEvent(event: WebhookReceivedEvent): Promise<void> {
+    await this.webhookEventRepo.update(
+      { eventId: event.eventId },
+      {
+        receivedAt: new Date(event.receivedAt),
+        sourceIp: event.sourceIp ?? null,
+        signature: event.signature ?? null,
+        headers: (event.headers ?? {}) as any,
+        rawBody: event.rawBody,
+        parsedBody: (event.parsedBody ?? null) as any,
+        status: "received",
+        failureReason: null,
+      },
+    );
+  }
+
   async markValidated(eventId: string): Promise<void> {
-    await this.webhookEventRepo.update({ eventId }, { status: "validated" });
+    await this.webhookEventRepo.update(
+      { eventId },
+      { status: "validated", failureReason: null },
+    );
   }
 
   async markFailed(eventId: string, reason: string): Promise<void> {
